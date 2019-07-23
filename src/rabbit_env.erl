@@ -5,6 +5,7 @@
 -export([get_context_before_logging_init/1,
          get_context_after_logging_init/1,
          is_dev_environment/0,
+         dbg_config/0,
          log_context/1,
          context_to_app_env_vars/1,
          context_to_app_env_vars_no_logging/1,
@@ -19,6 +20,7 @@ get_context_before_logging_init(TakeFromRemoteNode) ->
              fun node_name_and_type/1,
              fun maybe_setup_dist_for_remote_query/1,
              fun log_levels/1,
+             fun dbg_config/1,
              fun config_files/1,
              fun log_files/1,
              fun mnesia_dir/1,
@@ -415,6 +417,11 @@ get_advanced_config_file_noex(ConfigBaseDir) ->
 %% RABBITMQ_LOG
 %%   Log level; overrides the configuration file value
 %%   Default: (undefined)
+%%
+%% RABBITMQ_DBG
+%%   List of `module`, `module:function` or `module:function/arity`
+%%   to watch with dbg.
+%%   Default: (undefined)
 
 log_levels(Context) ->
     LogLevels = get_log_levels(),
@@ -507,6 +514,51 @@ get_upgrade_log_file(#{nodename := Nodename}, LogBaseDir) ->
                                   "RABBITMQ_UPGRADE_LOG", Default)),
     os:putenv("RABBITMQ_UPDATE_LOG", Normalized),
     Normalized.
+
+dbg_config() ->
+    {Mods, Output} = get_dbg_config(),
+    #{dbg_output => Output,
+      dbg_mods => Mods}.
+
+dbg_config(Context) ->
+    DbgContext = dbg_config(),
+    maps:merge(Context, DbgContext).
+
+get_dbg_config() ->
+    Output = stdout,
+    DbgValue = get_prefixed_env_var("RABBITMQ_DBG"),
+    case DbgValue of
+        false -> {[], Output};
+        _     -> get_dbg_config1(string:lexemes(DbgValue, ","), [], Output)
+    end.
+
+get_dbg_config1(["=" ++ Filename | Rest], Mods, _) ->
+    get_dbg_config1(Rest, Mods, Filename);
+get_dbg_config1([SpecValue | Rest], Mods, Output) ->
+    Pattern = "([^:]+)(?::([^/]+)(?:/([0-9]+))?)?",
+    Options = [{capture, all_but_first, list}],
+    Mods1 = case re:run(SpecValue, Pattern, Options) of
+                {match, [M, F, A]} ->
+                    Entry = {list_to_atom(M),
+                             list_to_atom(F),
+                             list_to_integer(A)},
+                    [Entry | Mods];
+                {match, [M, F]} ->
+                    Entry = {list_to_atom(M),
+                             list_to_atom(F),
+                             '_'},
+                    [Entry | Mods];
+                {match, [M]} ->
+                    Entry = {list_to_atom(M),
+                             '_',
+                             '_'},
+                    [Entry | Mods];
+                nomatch ->
+                    Mods
+            end,
+    get_dbg_config1(Rest, Mods1, Output);
+get_dbg_config1([], Mods, Output) ->
+    {lists:reverse(Mods), Output}.
 
 %% -------------------------------------------------------------------
 %%
