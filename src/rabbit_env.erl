@@ -965,20 +965,27 @@ maybe_setup_dist_for_remote_query(#{from_remote_node := Remote} = Context) ->
                    nomatch -> shortnames;
                    _       -> longnames
                end,
+    ok = rabbit_nodes_common:ensure_epmd(),
     setup_dist_for_remote_query(Context, NamePart, HostPart, NameType, 50).
 
-setup_dist_for_remote_query(_, _, _, _, 0) ->
-    {error, ex_unavailable};
-setup_dist_for_remote_query(Context,
+setup_dist_for_remote_query(Context, _, _, _, 0) ->
+    Context;
+setup_dist_for_remote_query(#{from_remote_node := Remote} = Context,
                             NamePart, HostPart, NameType,
                             Attempts) ->
     RndNamePart = NamePart ++ "_ctl_" ++ integer_to_list(rand:uniform(100)),
     Nodename = rabbit_nodes_common:make({RndNamePart, HostPart}),
     case net_kernel:start([Nodename, NameType]) of
-        {ok, _} -> Context;
-        _       -> setup_dist_for_remote_query(Context,
-                                               NamePart, HostPart, NameType,
-                                               Attempts - 1)
+        {ok, _} ->
+            Context;
+        Error ->
+            logger:error(
+              "rabbit_env: Failed to setup distribution (as ~s) to "
+              "query node ~s: ~p",
+              [Nodename, Remote, Error]),
+            setup_dist_for_remote_query(Context,
+                                        NamePart, HostPart, NameType,
+                                        Attempts - 1)
     end.
 
 maybe_stop_dist_for_remote_query(#{from_remote_node := false} = Context) ->
