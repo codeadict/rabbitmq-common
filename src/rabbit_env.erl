@@ -6,6 +6,7 @@
          get_context_after_logging_init/1,
          is_dev_environment/0,
          dbg_config/0,
+         log_process_env/0,
          log_context/1,
          context_to_app_env_vars/1,
          context_to_app_env_vars_no_logging/1,
@@ -17,6 +18,7 @@ get_context_before_logging_init(TakeFromRemoteNode) ->
     %% The order of steps below is important because some of them
     %% depends on previous steps.
     Steps = [
+             fun data_dir/1,
              fun node_name_and_type/1,
              fun maybe_setup_dist_for_remote_query/1,
              fun log_levels/1,
@@ -54,6 +56,13 @@ run_context_steps(Context, Steps) ->
       fun(Step, Context1) -> Step(Context1) end,
       Context,
       Steps).
+
+log_process_env() ->
+    rabbit_log_prelaunch:debug("Process environment:"),
+    lists:foreach(
+      fun({Var, Value}) ->
+              rabbit_log_prelaunch:debug("  - ~s = ~s", [Var, Value])
+      end, lists:sort(os:list_env_vars())).
 
 log_context(Context) ->
     rabbit_log_prelaunch:debug("Context (based on environment variables):"),
@@ -603,8 +612,7 @@ get_mnesia_base_dir_from_node(Context, Remote) ->
             get_mnesia_base_dir(Context)
     end.
 
-get_default_mnesia_base_dir(Context) ->
-    DataDir = get_rabbitmq_data_dir(Context),
+get_default_mnesia_base_dir(#{data_dir := DataDir} = Context) ->
     Basename = case Context of
                    #{os_type := {unix, _}}  -> "mnesia";
                    #{os_type := {win32, _}} -> "db"
@@ -878,6 +886,10 @@ get_erlang_dist_tcp_port(AmqpTcpPort) ->
 %%    Directory where to put RabbitMQ data.
 %%    Default: !APPDATA!\RabbitMQ
 
+data_dir(Context) ->
+    DataDir = get_rabbitmq_data_dir(Context),
+    Context#{data_dir => DataDir}.
+
 get_rabbitmq_data_dir(#{os_type := {unix, _}}) ->
     SysPrefix = get_sys_prefix(),
     filename:join([SysPrefix, "var", "lib", "rabbitmq"]);
@@ -885,16 +897,18 @@ get_rabbitmq_data_dir(#{os_type := {win32, _}}) ->
     get_rabbitmq_base().
 
 get_sys_prefix() ->
-    normalize_path(get_env_var("SYS_PREFIX", "")).
+    Dir = get_env_var("SYS_PREFIX", ""),
+    normalize_path(Dir).
 
 get_rabbitmq_base() ->
-    case get_env_var("RABBITMQ_BASE") of
-        false ->
-            AppData = get_env_var("APPDATA"),
-            filename:join(AppData, "RabbitMQ");
-        Value ->
-            normalize_path(Value)
-    end.
+    Dir = case get_env_var("RABBITMQ_BASE") of
+              false ->
+                  AppData = get_env_var("APPDATA"),
+                  filename:join(AppData, "RabbitMQ");
+              Value ->
+                  Value
+          end,
+    normalize_path(Dir).
 
 %% -------------------------------------------------------------------
 %% Helpers.
