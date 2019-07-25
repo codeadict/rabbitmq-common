@@ -77,23 +77,36 @@ context_to_app_env_vars(Context) ->
     rabbit_log_prelaunch:debug(
       "Setting default application environment variables:"),
     Fun = fun({App, Param, Value}) ->
-                  rabbit_log_prelaunch:debug(
-                    "  - ~s:~s = ~p", [App, Param, Value]),
-                  ok = application:set_env(
-                         App, Param, Value, [{persistent, true}])
+                  case application:get_env(App, Param) of
+                      undefined ->
+                          rabbit_log_prelaunch:debug(
+                            "  - ~s:~s = ~p", [App, Param, Value]),
+                          ok = application:set_env(
+                                 App, Param, Value, [{persistent, true}]);
+                      {ok, ExistingValue} ->
+                          rabbit_log_prelaunch:debug(
+                            "  - ~s:~s = ~p (already set; not replacing "
+                            "by ~p)",
+                            [App, Param, ExistingValue, Value]),
+                          ok
+                  end
           end,
     context_to_app_env_vars1(Context, Fun).
 
 context_to_app_env_vars_no_logging(Context) ->
     Fun = fun({App, Param, Value}) ->
-                  ok = application:set_env(
-                         App, Param, Value, [{persistent, true}])
+                  case application:get_env(App, Param) of
+                      undefined ->
+                          ok = application:set_env(
+                                 App, Param, Value, [{persistent, true}]);
+                      {ok, _} ->
+                          ok
+                  end
           end,
     context_to_app_env_vars1(Context, Fun).
 
 context_to_app_env_vars1(
-  #{erlang_dist_tcp_port := DistTcpPort,
-    mnesia_dir := MnesiaDir,
+  #{mnesia_dir := MnesiaDir,
     feature_flags_file := FFFile,
     quorum_queue_dir := QuorumQueueDir,
     plugins_path := PluginsPath,
@@ -105,9 +118,7 @@ context_to_app_env_vars1(
       %% Those are all the application environment variables which
       %% were historically set on the erl(1) command line in
       %% rabbitmq-server(8).
-      [{kernel, inet_dist_listen_min, DistTcpPort},
-       {kernel, inet_dist_listen_max, DistTcpPort},
-       {kernel, inet_default_connect_options, [{nodelay, true}]},
+      [{kernel, inet_default_connect_options, [{nodelay, true}]},
        {sasl, errlog_type, error},
        {os_mon, start_cpu_sup, false},
        {os_mon, start_disksup, false},
@@ -120,6 +131,15 @@ context_to_app_env_vars1(
        {rabbit, enabled_plugins_file, EnabledPluginsFile}]),
 
     case Context of
+        #{erlang_dist_tcp_port := DistTcpPort} ->
+            lists:foreach(
+              Fun,
+              [{kernel, inet_dist_listen_min, DistTcpPort},
+               {kernel, inet_dist_listen_max, DistTcpPort}]);
+        _ ->
+            ok
+    end,
+    case Context of
         #{amqp_ipaddr_and_tcp_port := {IpAddr, TcpPort}}
           when IpAddr /= undefined andalso TcpPort /= undefined ->
             Fun({rabbit, tcp_listeners, [{IpAddr, TcpPort}]});
@@ -128,12 +148,7 @@ context_to_app_env_vars1(
     end,
     ok.
 
-context_to_code_path(#{dev_environment := false,
-                       plugins_path := PluginsPath}) ->
-    Dirs = get_user_lib_dirs(PluginsPath),
-    add_paths_to_code_path(Dirs);
-context_to_code_path(#{dev_environment := true,
-                       plugins_path := PluginsPath}) ->
+context_to_code_path(#{plugins_path := PluginsPath}) ->
     Dirs = get_user_lib_dirs(PluginsPath),
     add_paths_to_code_path(Dirs).
 
@@ -773,12 +788,25 @@ get_plugins_path_from_node(Context, Remote) ->
             get_plugins_path_from_env(Context)
     end.
 
-get_default_plugins_path(#{dev_environment := false}) ->
-    CommonPlugin = code:lib_dir(rabbit_common),
-    filename:dirname(CommonPlugin);
-get_default_plugins_path(#{dev_environment := true}) ->
-    {ok, Cwd} = file:get_cwd(),
-    filename:join(Cwd, "plugins").
+get_default_plugins_path(#{from_remote_node := false}) ->
+    get_default_plugins_path_from_env();
+get_default_plugins_path(#{from_remote_node := Remote}) ->
+    get_default_plugins_path_from_node(Remote).
+
+get_default_plugins_path_from_env() ->
+    Path = code:lib_dir(rabbit_common),
+    filename:dirname(Path).
+
+get_default_plugins_path_from_node(Remote) ->
+    Ret = query_remote(Remote, code, lib_dir, [rabbit_common]),
+    case Ret of
+        {ok, {error, _} = Error} ->
+            throw({query, Remote, {code, lib_dir, Error}});
+        {ok, Path} ->
+            filename:dirname(Path);
+        {badrpc, nodedown} ->
+            get_default_plugins_path_from_env()
+    end.
 
 get_plugins_expand_dir(#{mnesia_base_dir := MnesiaBaseDir,
                          nodename := Nodename}) ->
@@ -888,7 +916,9 @@ get_erlang_dist_tcp_port(AmqpTcpPort) ->
 
 data_dir(Context) ->
     DataDir = get_rabbitmq_data_dir(Context),
-    Context#{data_dir => DataDir}.
+    RabbitmqHome = get_rabbitmq_home(Context),
+    Context#{data_dir => DataDir,
+             rabbitmq_home => RabbitmqHome}.
 
 get_rabbitmq_data_dir(#{os_type := {unix, _}}) ->
     SysPrefix = get_sys_prefix(),
@@ -909,6 +939,15 @@ get_rabbitmq_base() ->
                   Value
           end,
     normalize_path(Dir).
+
+get_rabbitmq_home(Context) ->
+    Dir = case get_env_var("RABBITMQ_HOME") of
+              false -> filename:dirname(get_default_plugins_path(Context));
+              Value -> Value
+          end,
+    Normalized = normalize_path(Dir),
+    os:putenv("RABBITMQ_HOME", Normalized),
+    Normalized.
 
 %% -------------------------------------------------------------------
 %% Helpers.
@@ -977,6 +1016,8 @@ setup_dist_for_remote_query(#{from_remote_node := Remote} = Context,
     Nodename = rabbit_nodes_common:make({RndNamePart, HostPart}),
     case net_kernel:start([Nodename, NameType]) of
         {ok, _} ->
+            Context#{dist_started_for_remote_query => true};
+        {error, {already_started, _}} ->
             Context;
         Error ->
             logger:error(
@@ -988,10 +1029,11 @@ setup_dist_for_remote_query(#{from_remote_node := Remote} = Context,
                                         Attempts - 1)
     end.
 
-maybe_stop_dist_for_remote_query(#{from_remote_node := false} = Context) ->
+maybe_stop_dist_for_remote_query(
+  #{dist_started_for_remote_query := true} = Context) ->
+    net_kernel:stop(),
     Context;
 maybe_stop_dist_for_remote_query(Context) ->
-    net_kernel:stop(),
     Context.
 
 query_remote(Remote, Mod, Func, Args) ->
