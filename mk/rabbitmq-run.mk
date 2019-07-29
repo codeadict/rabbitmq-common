@@ -235,18 +235,24 @@ $(TEST_TLS_CERTS_DIR): node-tmpdir
 show-test-tls-certs-dir: $(TEST_TLS_CERTS_DIR)
 	@echo $(TEST_TLS_CERTS_DIR)
 
+ifeq ($(wildcard ebin/test),)
+DIST_TARGET = dist
+else
+DIST_TARGET = test-dist
+endif
+
 run-broker run-tls-broker: RABBITMQ_CONFIG_FILE ?= $(basename $(TEST_CONFIG_FILE))
 run-broker:     config := $(test_rabbitmq_config)
 run-tls-broker: config := $(test_rabbitmq_config_with_tls)
 run-tls-broker: $(TEST_TLS_CERTS_DIR)
 
-run-broker run-tls-broker: node-tmpdir dist $(TEST_CONFIG_FILE)
+run-broker run-tls-broker: node-tmpdir $(DIST_TARGET) $(TEST_CONFIG_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  RABBITMQ_CONFIG_FILE=$(RABBITMQ_CONFIG_FILE) \
 	  $(RABBITMQ_SERVER)
 
-run-background-broker: node-tmpdir dist
+run-background-broker: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) -detached
 
@@ -254,13 +260,13 @@ run-background-broker: node-tmpdir dist
 # Run a bare Erlang node.
 # --------------------------------------------------------------------
 
-run-node: node-tmpdir dist
+run-node: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  $(RABBITMQ_SERVER)
 
-run-background-node: virgin-node-tmpdir dist
+run-background-node: virgin-node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) -detached
@@ -276,7 +282,7 @@ endif
 
 RMQCTL_WAIT_TIMEOUT ?= 60
 
-start-background-node: node-tmpdir dist
+start-background-node: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) \
@@ -284,7 +290,7 @@ start-background-node: node-tmpdir dist
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait --timeout $(RMQCTL_WAIT_TIMEOUT) $(RABBITMQ_PID_FILE) kernel
 
-start-background-broker: node-tmpdir dist
+start-background-broker: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) \
 	  $(REDIRECT_STDIO) &
