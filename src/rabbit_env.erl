@@ -1050,7 +1050,7 @@ maybe_setup_dist_for_remote_query(Context) ->
 
 setup_dist_for_remote_query(Context, _, _, _, 0) ->
     Context;
-setup_dist_for_remote_query(#{from_remote_node := Remote} = Context,
+setup_dist_for_remote_query(#{from_remote_node := {Remote, _}} = Context,
                             NamePart, HostPart, NameType,
                             Attempts) ->
     RndNamePart = NamePart ++ "_ctl_" ++ integer_to_list(rand:uniform(100)),
@@ -1058,7 +1058,7 @@ setup_dist_for_remote_query(#{from_remote_node := Remote} = Context,
     case net_kernel:start([Nodename, NameType]) of
         {ok, _} ->
             Context#{dist_started_for_remote_query => true};
-        {error, {already_started, _}} ->
+        {error, {{already_started, _}, _}} ->
             Context;
         Error ->
             logger:error(
