@@ -193,40 +193,109 @@ $(mix_task_archive_deps):
 
 MAYBE_APPS_LIST = $(if $(shell test -f $(ERLANG_MK_TMP)/apps.log && echo OK), \
 		  $(ERLANG_MK_TMP)/apps.log)
+DIST_LOCK = $(DIST_DIR).lock
 
-dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) all
-	$(gen_verbose) $(MAKE) do-dist \
-		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_DEPS_LIST) $(MAYBE_APPS_LIST)"
+dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) all cli-scripts cli-escripts
+	$(gen_verbose) \
+	if command -v flock >/dev/null; then \
+		flock $(DIST_LOCK) \
+		sh -c '$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"'; \
+	elif command -v lockf >/dev/null; then \
+		lockf $(DIST_LOCK) \
+		sh -c '$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"'; \
+	else \
+		$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"; \
+	fi
 
 test-dist:: export TEST_DIR=NON-EXISTENT
 test-dist:: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) test-build
-	$(gen_verbose) $(MAKE) do-dist \
-		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) $(MAYBE_APPS_LIST)"
+	$(gen_verbose) \
+	if command -v flock >/dev/null; then \
+		flock $(DIST_LOCK) \
+		sh -c '$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"'; \
+	elif command -v lockf >/dev/null; then \
+		lockf $(DIST_LOCK) \
+		sh -c '$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"'; \
+	else \
+		$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"; \
+	fi
 
 DIST_EZS = $(ERLANGMK_DIST_EZS) $(MIX_DIST_EZS)
 
-do-dist:: $(DIST_EZS) cli-scripts cli-escripts
+do-dist:: $(DIST_EZS)
 	$(verbose) unwanted='$(filter-out $(DIST_EZS) $(EXTRA_DIST_EZS), \
 		$(wildcard $(DIST_DIR)/*.ez))'; \
 	test -z "$$unwanted" || (echo " RM     $$unwanted" && rm -f $$unwanted)
 
 test-build:: cli-scripts cli-escripts
 
+CLI_SCRIPTS_LOCK = $(CLI_SCRIPTS_DIR).lock
+CLI_ESCRIPTS_LOCK = $(CLI_ESCRIPTS_DIR).lock
+
 ifeq ($(PROJECT),rabbit)
 cli-scripts:
-	$(gen_verbose) rm -rf "$(CLI_SCRIPTS_DIR)"
-	$(verbose) cp -a scripts $(CLI_SCRIPTS_DIR)
+	$(gen_verbose) \
+	if command -v flock >/dev/null; then \
+		flock $(CLI_SCRIPTS_LOCK) \
+		sh -c 'rm -rf "$(CLI_SCRIPTS_DIR)" && \
+		cp -a scripts "$(CLI_SCRIPTS_DIR)"'; \
+	elif command -v lockf >/dev/null; then \
+		lockf $(CLI_SCRIPTS_LOCK) \
+		sh -c 'rm -rf "$(CLI_SCRIPTS_DIR)" && \
+		cp -a scripts "$(CLI_SCRIPTS_DIR)"'; \
+	else \
+		rm -rf "$(CLI_SCRIPTS_DIR)" && \
+		cp -a scripts "$(CLI_SCRIPTS_DIR)"; \
+	fi
 else
 cli-scripts:
-	$(gen_verbose) rm -rf "$(CLI_SCRIPTS_DIR)"
-	$(verbose) cp -a $(DEPS_DIR)/rabbit/scripts $(CLI_SCRIPTS_DIR)
+	$(gen_verbose) \
+	if command -v flock >/dev/null; then \
+		flock $(CLI_SCRIPTS_LOCK) \
+		sh -c 'rm -rf "$(CLI_SCRIPTS_DIR)" && \
+		cp -a "$(DEPS_DIR)/rabbit/scripts" "$(CLI_SCRIPTS_DIR)"'; \
+	elif command -v lockf >/dev/null; then \
+		lockf $(CLI_SCRIPTS_LOCK) \
+		sh -c 'rm -rf "$(CLI_SCRIPTS_DIR)" && \
+		cp -a "$(DEPS_DIR)/rabbit/scripts" "$(CLI_SCRIPTS_DIR)"'; \
+	else \
+		rm -rf "$(CLI_SCRIPTS_DIR)" && \
+		cp -a "$(DEPS_DIR)/rabbit/scripts" "$(CLI_SCRIPTS_DIR)"; \
+	fi
 endif
 
 cli-escripts:
-	$(gen_verbose) rm -rf "$(CLI_ESCRIPTS_DIR)"
-	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
-		PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
-		DESTDIR=
+	$(gen_verbose) \
+	if command -v flock >/dev/null; then \
+		flock $(CLI_ESCRIPTS_LOCK) \
+		sh -c 'rm -rf "$(CLI_ESCRIPTS_DIR)" && \
+		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
+			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
+			DESTDIR='; \
+	elif command -v lockf >/dev/null; then \
+		lockf $(CLI_ESCRIPTS_LOCK) \
+		sh -c 'rm -rf "$(CLI_ESCRIPTS_DIR)" && \
+		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
+			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
+			DESTDIR='; \
+	else \
+		rm -rf "$(CLI_ESCRIPTS_DIR)" && \
+		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
+			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
+			DESTDIR= ; \
+	fi
 
 clean-dist::
 	$(gen_verbose) rm -rf \
