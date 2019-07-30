@@ -662,7 +662,7 @@ get_mnesia_dir(Context, MnesiaBaseDir) ->
 
 get_mnesia_dir_from_env(#{nodename := Nodename}, MnesiaBaseDir) ->
     Dir = get_prefixed_env_var(
-            "RABBITMQ_MNESA_DIR",
+            "RABBITMQ_MNESIA_DIR",
             filename:join(MnesiaBaseDir, Nodename)),
     normalize_path(Dir).
 
