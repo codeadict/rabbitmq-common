@@ -1058,6 +1058,8 @@ setup_dist_for_remote_query(#{from_remote_node := {Remote, _}} = Context,
     case net_kernel:start([Nodename, NameType]) of
         {ok, _} ->
             Context#{dist_started_for_remote_query => true};
+        {error, {already_started, _}} ->
+            Context;
         {error, {{already_started, _}, _}} ->
             Context;
         Error ->
