@@ -251,20 +251,20 @@ cli-scripts:
 		flock $(CLI_SCRIPTS_LOCK) \
 		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
 		for file in scripts/*; do \
-			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
 			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
 		done'; \
 	elif command -v lockf >/dev/null; then \
 		lockf $(CLI_SCRIPTS_LOCK) \
 		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
 		for file in scripts/*; do \
-			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
 			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
 		done'; \
 	else \
 		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
 		for file in scripts/*; do \
-			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
 			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
 		done; \
 	fi
@@ -275,20 +275,20 @@ cli-scripts:
 		flock $(CLI_SCRIPTS_LOCK) \
 		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
 		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
-			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
 			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
 		done'; \
 	elif command -v lockf >/dev/null; then \
 		lockf $(CLI_SCRIPTS_LOCK) \
 		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
 		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
-			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
 			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
 		done'; \
 	else \
 		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
 		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
-			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
 			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
 		done; \
 	fi
