@@ -697,10 +697,16 @@ get_quorum_queue_dir(#{mnesia_dir := MnesiaDir}) ->
 %% RABBITMQ_PID_FILE [Unix only]
 %%   File used to write the Erlang VM OS PID.
 %%   Default: ${RABBITMQ_MNESIA_DIR}.pid
+%%
+%% RABBITMQ_KEEP_PID_FILE_ON_EXIT [Unix only]
+%%   Whether to keep or remove the PID file on Erlang VM exit.
+%%   Default: true
 
 pid_file(#{os_type := {unix, _}} = Context) ->
     PidFile = get_pid_file_path(Context),
-    Context#{pid_file => PidFile};
+    KeepPidFile = keep_pid_file_on_exit(),
+    Context#{pid_file => PidFile,
+             keep_pid_file_on_exit => KeepPidFile};
 pid_file(#{os_type := {win32, _}} = Context) ->
     Context.
 
@@ -710,6 +716,12 @@ get_pid_file_path(#{mnesia_base_dir := MnesiaBaseDir,
              "RABBITMQ_PID_FILE",
              filename:join(MnesiaBaseDir, atom_to_list(Nodename) ++ ".pid")),
     normalize_path(File).
+
+keep_pid_file_on_exit() ->
+    case get_prefixed_env_var("RABBITMQ_KEEP_PID_FILE_ON_EXIT") of
+        false -> false;
+        Value -> value_is_yes(Value)
+    end.
 
 %% -------------------------------------------------------------------
 %%
@@ -1014,6 +1026,10 @@ get_prefixed_env_var(VarName, DefaultValue) ->
         false -> DefaultValue;
         Value -> Value
     end.
+
+value_is_yes(Value) when is_list(Value) ->
+    Options = [{capture, none}, caseless],
+    re:run(string:strip(Value), "^(1|yes|true)$", Options) =:= match.
 
 normalize_path("" = Path) ->
     Path;
