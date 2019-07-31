@@ -290,7 +290,7 @@ cli-scripts:
 		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
 			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
 			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done
+		done; \
 	fi
 endif
 
