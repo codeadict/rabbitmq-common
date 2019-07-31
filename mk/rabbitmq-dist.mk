@@ -249,30 +249,48 @@ cli-scripts:
 	$(gen_verbose) \
 	if command -v flock >/dev/null; then \
 		flock $(CLI_SCRIPTS_LOCK) \
-		sh -c 'rm -rf "$(CLI_SCRIPTS_DIR)" && \
-		cp -a scripts "$(CLI_SCRIPTS_DIR)"'; \
+		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in scripts/*; do \
+			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done'; \
 	elif command -v lockf >/dev/null; then \
 		lockf $(CLI_SCRIPTS_LOCK) \
-		sh -c 'rm -rf "$(CLI_SCRIPTS_DIR)" && \
-		cp -a scripts "$(CLI_SCRIPTS_DIR)"'; \
+		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in scripts/*; do \
+			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done'; \
 	else \
-		rm -rf "$(CLI_SCRIPTS_DIR)" && \
-		cp -a scripts "$(CLI_SCRIPTS_DIR)"; \
+		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in scripts/*; do \
+			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done; \
 	fi
 else
 cli-scripts:
 	$(gen_verbose) \
 	if command -v flock >/dev/null; then \
 		flock $(CLI_SCRIPTS_LOCK) \
-		sh -c 'rm -rf "$(CLI_SCRIPTS_DIR)" && \
-		cp -a "$(DEPS_DIR)/rabbit/scripts" "$(CLI_SCRIPTS_DIR)"'; \
+		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
+			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done'; \
 	elif command -v lockf >/dev/null; then \
 		lockf $(CLI_SCRIPTS_LOCK) \
-		sh -c 'rm -rf "$(CLI_SCRIPTS_DIR)" && \
-		cp -a "$(DEPS_DIR)/rabbit/scripts" "$(CLI_SCRIPTS_DIR)"'; \
+		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
+			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done'; \
 	else \
-		rm -rf "$(CLI_SCRIPTS_DIR)" && \
-		cp -a "$(DEPS_DIR)/rabbit/scripts" "$(CLI_SCRIPTS_DIR)"; \
+		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
+			cmp "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done
 	fi
 endif
 
@@ -280,18 +298,18 @@ cli-escripts:
 	$(gen_verbose) \
 	if command -v flock >/dev/null; then \
 		flock $(CLI_ESCRIPTS_LOCK) \
-		sh -c 'rm -rf "$(CLI_ESCRIPTS_DIR)" && \
+		sh -c 'mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
 		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
 			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
 			DESTDIR='; \
 	elif command -v lockf >/dev/null; then \
 		lockf $(CLI_ESCRIPTS_LOCK) \
-		sh -c 'rm -rf "$(CLI_ESCRIPTS_DIR)" && \
+		sh -c 'mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
 		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
 			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
 			DESTDIR='; \
 	else \
-		rm -rf "$(CLI_ESCRIPTS_DIR)" && \
+		mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
 		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
 			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
 			DESTDIR= ; \
