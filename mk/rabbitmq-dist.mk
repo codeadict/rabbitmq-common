@@ -195,7 +195,7 @@ MAYBE_APPS_LIST = $(if $(shell test -f $(ERLANG_MK_TMP)/apps.log && echo OK), \
 		  $(ERLANG_MK_TMP)/apps.log)
 DIST_LOCK = $(DIST_DIR).lock
 
-dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) all cli-scripts cli-escripts
+dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) all install-cli
 	$(gen_verbose) \
 	if command -v flock >/dev/null; then \
 		flock $(DIST_LOCK) \
@@ -239,13 +239,16 @@ do-dist:: $(DIST_EZS)
 		$(wildcard $(DIST_DIR)/*.ez))'; \
 	test -z "$$unwanted" || (echo " RM     $$unwanted" && rm -f $$unwanted)
 
-test-build:: cli-scripts cli-escripts
+test-build:: install-cli
 
 CLI_SCRIPTS_LOCK = $(CLI_SCRIPTS_DIR).lock
 CLI_ESCRIPTS_LOCK = $(CLI_ESCRIPTS_DIR).lock
 
+install-cli: install-cli-scripts install-cli-escripts
+	@:
+
 ifeq ($(PROJECT),rabbit)
-cli-scripts:
+install-cli-scripts:
 	$(gen_verbose) \
 	if command -v flock >/dev/null; then \
 		flock $(CLI_SCRIPTS_LOCK) \
@@ -269,7 +272,7 @@ cli-scripts:
 		done; \
 	fi
 else
-cli-scripts:
+install-cli-scripts:
 	$(gen_verbose) \
 	if command -v flock >/dev/null; then \
 		flock $(CLI_SCRIPTS_LOCK) \
@@ -294,7 +297,7 @@ cli-scripts:
 	fi
 endif
 
-cli-escripts:
+install-cli-escripts:
 	$(gen_verbose) \
 	if command -v flock >/dev/null; then \
 		flock $(CLI_ESCRIPTS_LOCK) \
