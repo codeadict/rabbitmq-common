@@ -335,11 +335,10 @@ archive_extension() ->
 %%   Default: rabbit@<hostname>
 %%
 %% RABBITMQ_USE_LONGNAME
-%%   Main configuration file.
-%%   Extension is optional. `.config` for the old rlang-term-based
-%%   format, `.conf` for the new Cuttlefish-based format.
-%%   Default: (Unix) ${SYS_PREFIX}/etc/rabbitmq/rabbitmq
-%%         (Windows) ${RABBITMQ_BASE}\rabbitmq
+%%   Flag indicating if long Erlang node names should be used instead
+%%   of short ones. To use long names, the value must be `true`. Other
+%%   values are considered false.
+%%   Default: unset (use short names)
 
 node_name_and_type(Context) ->
     NameType = get_node_name_type(),
