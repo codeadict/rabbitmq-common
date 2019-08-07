@@ -523,7 +523,7 @@ parse_level(_)           -> undefined.
 
 get_log_base_dir(#{os_type := {unix, _}}) ->
     SysPrefix = get_sys_prefix(),
-    Default = filename:join([SysPrefix, "etc", "rabbitmq"]),
+    Default = filename:join([SysPrefix, "var", "log", "rabbitmq"]),
     Normalized = normalize_path(get_prefixed_env_var(
                                   "RABBITMQ_LOG_BASE", Default)),
     %os:putenv("RABBITMQ_LOG_BASE", Normalized),
