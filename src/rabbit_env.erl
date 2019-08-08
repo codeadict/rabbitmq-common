@@ -2,7 +2,9 @@
 
 -include_lib("kernel/include/file.hrl").
 
--export([get_context_before_logging_init/0,
+-export([get_context/0,
+         get_context/1,
+         get_context_before_logging_init/0,
          get_context_before_logging_init/1,
          get_context_after_logging_init/1,
          is_dev_environment/0,
@@ -40,6 +42,14 @@
          "RABBITMQ_USE_LONGNAME",
          "SYS_PREFIX"
         ]).
+
+get_context() ->
+    EarlyContext = get_context_before_logging_init(),
+    get_context_after_logging_init(EarlyContext).
+
+get_context(TakeFromRemoteNode) ->
+    EarlyContext = get_context_before_logging_init(TakeFromRemoteNode),
+    get_context_after_logging_init(EarlyContext).
 
 get_context_before_logging_init() ->
     get_context_before_logging_init(false).
