@@ -366,8 +366,7 @@ archive_extension() ->
 %%
 %% RABBITMQ_USE_LONGNAME
 %%   Flag indicating if long Erlang node names should be used instead
-%%   of short ones. To use long names, the value must be `true`. Other
-%%   values are considered false.
+%%   of short ones.
 %%   Default: unset (use short names)
 
 node_name_and_type(Context) ->
@@ -380,8 +379,11 @@ node_name_and_type(Context) ->
 get_node_name_type() ->
     UseLongname = get_prefixed_env_var("RABBITMQ_USE_LONGNAME"),
     case UseLongname of
-        "true" -> longnames;
-        _      -> shortnames
+        false -> shortnames;
+        Value -> case value_is_yes(Value) of
+                     true  -> longnames;
+                     false -> shortnames
+                 end
     end.
 
 get_node_name(NameType) ->
