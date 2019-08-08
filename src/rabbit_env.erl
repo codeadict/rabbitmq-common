@@ -389,26 +389,21 @@ get_node_name_type() ->
 get_node_name(NameType) ->
     LongHostname = net_adm:localhost(),
     ShortHostname = re:replace(LongHostname, "\\..*$", "", [{return, list}]),
-    Nodename = case os:getenv("RABBITMQ_NODENAME") of
-                   false when NameType =:= shortnames ->
-                       rabbit_nodes_common:make({"rabbit", ShortHostname});
-                   false when NameType =:= longnames ->
-                       rabbit_nodes_common:make({"rabbit", LongHostname});
-                   Value ->
-                       case string:find(Value, "@") of
-                           nomatch when NameType =:= shortnames ->
-                               rabbit_nodes_common:make(
-                                 {Value, ShortHostname});
-                           nomatch when NameType =:= longnames ->
-                               rabbit_nodes_common:make(
-                                 {Value, LongHostname});
-                           _ ->
-                               rabbit_nodes_common:make(
-                                 Value)
-                       end
-               end,
-    %os:putenv("RABBITMQ_NODENAME", atom_to_list(Nodename)),
-    Nodename.
+    case os:getenv("RABBITMQ_NODENAME") of
+        false when NameType =:= shortnames ->
+            rabbit_nodes_common:make({"rabbit", ShortHostname});
+        false when NameType =:= longnames ->
+            rabbit_nodes_common:make({"rabbit", LongHostname});
+        Value ->
+            case string:find(Value, "@") of
+                nomatch when NameType =:= shortnames ->
+                    rabbit_nodes_common:make({Value, ShortHostname});
+                nomatch when NameType =:= longnames ->
+                    rabbit_nodes_common:make({Value, LongHostname});
+                _ ->
+                    rabbit_nodes_common:make(Value)
+            end
+    end.
 
 %% -------------------------------------------------------------------
 %%
@@ -448,9 +443,7 @@ get_main_config_file_noex(Context) ->
              "RABBITMQ_CONFIG_FILE",
              get_default_main_config_file_noex(Context)),
     File1 = re:replace(File, "\\.(conf|config)$", "", [{return, list}]),
-    Normalized = normalize_path(File1),
-    %os:putenv("RABBITMQ_CONFIG_FILE", Normalized),
-    Normalized.
+    normalize_path(File1).
 
 get_default_main_config_file_noex(#{config_base_dir := ConfigBaseDir}) ->
     filename:join(ConfigBaseDir, "rabbitmq").
@@ -460,9 +453,7 @@ get_advanced_config_file_noex(Context) ->
              "RABBITMQ_ADVANCED_CONFIG_FILE",
              get_default_advanced_config_file_noex(Context)),
     File1 = re:replace(File, "\\.config$", "", [{return, list}]),
-    Normalized = normalize_path(File1),
-    %os:putenv("RABBITMQ_ADVANCED_CONFIG_FILE", Normalized),
-    Normalized.
+    normalize_path(File1).
 
 get_default_advanced_config_file_noex(#{config_base_dir := ConfigBaseDir}) ->
     filename:join(ConfigBaseDir, "advanced").
@@ -556,35 +547,24 @@ parse_level(_)           -> undefined.
 get_log_base_dir(#{os_type := {unix, _}}) ->
     SysPrefix = get_sys_prefix(),
     Default = filename:join([SysPrefix, "var", "log", "rabbitmq"]),
-    Normalized = normalize_path(get_prefixed_env_var(
-                                  "RABBITMQ_LOG_BASE", Default)),
-    %os:putenv("RABBITMQ_LOG_BASE", Normalized),
-    Normalized;
+    normalize_path(get_prefixed_env_var("RABBITMQ_LOG_BASE", Default));
 get_log_base_dir(#{os_type := {win32, _}}) ->
     RabbitmqBase = get_rabbitmq_base(),
     Default = filename:join([RabbitmqBase, "log"]),
-    Normalized = normalize_path(get_prefixed_env_var(
-                                  "RABBITMQ_LOG_BASE", Default)),
-    %os:putenv("RABBITMQ_LOG_BASE", Normalized),
-    Normalized.
+    normalize_path(get_prefixed_env_var("RABBITMQ_LOG_BASE", Default)).
 
 get_main_log_file(#{nodename := Nodename}, LogBaseDir) ->
     Default = filename:join(LogBaseDir, atom_to_list(Nodename) ++ ".log"),
     Value = get_prefixed_env_var("RABBITMQ_LOGS", Default),
-    Normalized = case Value of
-                     "-" -> Value;
-                     _   -> normalize_path(Value)
-                 end,
-    %os:putenv("RABBITMQ_LOGS", Normalized),
-    Normalized.
+    case Value of
+        "-" -> Value;
+        _   -> normalize_path(Value)
+    end.
 
 get_upgrade_log_file(#{nodename := Nodename}, LogBaseDir) ->
     Default = filename:join(LogBaseDir,
                             atom_to_list(Nodename) ++ "_upgrade.log"),
-    Normalized = normalize_path(get_prefixed_env_var(
-                                  "RABBITMQ_UPGRADE_LOG", Default)),
-    %os:putenv("RABBITMQ_UPDATE_LOG", Normalized),
-    Normalized.
+    normalize_path(get_prefixed_env_var("RABBITMQ_UPGRADE_LOG", Default)).
 
 dbg_config() ->
     {Mods, Output} = get_dbg_config(),
@@ -1036,9 +1016,7 @@ get_rabbitmq_home(Context) ->
               false -> filename:dirname(get_default_plugins_path(Context));
               Value -> Value
           end,
-    Normalized = normalize_path(Dir),
-    %os:putenv("RABBITMQ_HOME", Normalized),
-    Normalized.
+    normalize_path(Dir).
 
 load_conf_env_file(#{os_type := {unix, _}} = Context) ->
     SysPrefix = get_sys_prefix(),
