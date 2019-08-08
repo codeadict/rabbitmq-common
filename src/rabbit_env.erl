@@ -13,6 +13,34 @@
          context_to_app_env_vars_no_logging/1,
          context_to_code_path/1]).
 
+-define(USED_ENV_VARS,
+        [
+         "RABBITMQ_ADVANCED_CONFIG_FILE",
+         "RABBITMQ_BASE",
+         "RABBITMQ_CONF_ENV_FILE"
+         "RABBITMQ_CONFIG_FILE",
+         "RABBITMQ_DBG",
+         "RABBITMQ_DIST_PORT",
+         "RABBITMQ_ENABLED_PLUGINS_FILE",
+         "RABBITMQ_ENABLED_PLUGINS",
+         "RABBITMQ_FEATURE_FLAGS_FILE",
+         "RABBITMQ_KEEP_PID_FILE_ON_EXIT",
+         "RABBITMQ_LOG_BASE",
+         "RABBITMQ_LOG",
+         "RABBITMQ_LOGS",
+         "RABBITMQ_MNESIA_BASE",
+         "RABBITMQ_MNESIA_DIR",
+         "RABBITMQ_NODE_IP_ADDRESS",
+         "RABBITMQ_NODE_PORT",
+         "RABBITMQ_NODENAME",
+         "RABBITMQ_PID_FILE",
+         "RABBITMQ_PLUGINS_DIR",
+         "RABBITMQ_PLUGINS_EXPAND_DIR",
+         "RABBITMQ_QUORUM_DIR",
+         "RABBITMQ_USE_LONGNAME",
+         "SYS_PREFIX"
+        ]).
+
 get_context_before_logging_init() ->
     get_context_before_logging_init(false).
 
@@ -20,19 +48,7 @@ get_context_before_logging_init(TakeFromRemoteNode) ->
     %% The order of steps below is important because some of them
     %% depends on previous steps.
     Steps = [
-             fun data_dir/1,
-             fun node_name_and_type/1,
-             fun maybe_setup_dist_for_remote_query/1,
-             fun log_levels/1,
-             fun dbg_config/1,
-             fun config_files/1,
-             fun log_files/1,
-             fun mnesia_dir/1,
-             fun quorum_dir/1,
-             fun pid_file/1,
-             fun feature_flags_file/1,
-             fun plugins_dirs/1,
-             fun maybe_stop_dist_for_remote_query/1
+             fun log_levels/1
             ],
 
     run_context_steps(context_base(TakeFromRemoteNode), Steps).
@@ -41,6 +57,20 @@ get_context_after_logging_init(EarlyContext) ->
     %% The order of steps below is important because some of them
     %% depends on previous steps.
     Steps = [
+             fun data_dir/1,
+             fun config_base_dir/1,
+             fun load_conf_env_file/1,
+             fun node_name_and_type/1,
+             fun maybe_setup_dist_for_remote_query/1,
+             fun dbg_config/1,
+             fun config_files/1,
+             fun log_files/1,
+             fun mnesia_dir/1,
+             fun quorum_dir/1,
+             fun pid_file/1,
+             fun feature_flags_file/1,
+             fun plugins_dirs/1,
+             fun maybe_stop_dist_for_remote_query/1,
              fun tcp_configuration/1
             ],
 
@@ -77,7 +107,7 @@ log_process_env() ->
     rabbit_log_prelaunch:debug("Process environment:"),
     lists:foreach(
       fun({Var, Value}) ->
-              rabbit_log_prelaunch:debug("  - ~s = ~s", [Var, Value])
+              rabbit_log_prelaunch:debug("  - ~s = ~ts", [Var, Value])
       end, lists:sort(os:list_env_vars())).
 
 log_context(Context) ->
@@ -392,25 +422,10 @@ get_node_name(NameType) ->
 %%   Erlang-term-based format with a `.config` extension.
 %%   Default: (Unix) ${SYS_PREFIX}/etc/rabbitmq/advanced.config
 %%         (Windows) ${RABBITMQ_BASE}\advanced.config
-%%
-%% Now unused:
-%%
-%% RABBITMQ_SCHEMA_DIR [UNUSED]
-%%   Directory where all detected Cuttlefish schemas are written.
-%%   Replaced by the use of Cuttlefish as a libray.
-%%
-%% RABBITMQ_GENERATED_CONFIG_DIR [UNUSED]
-%%   Directory where final configuration (generated from
-%%   Cuttlefish-based configuration) is written
-%%   Replaced by the use of Cuttlefish as a libray.
 
-config_files(Context) ->
+config_base_dir(Context) ->
     ConfigBaseDir = get_config_base_dir(Context),
-    MainConfigFileNoEx = get_main_config_file_noex(ConfigBaseDir),
-    AdvancedConfigFileNoEx = get_advanced_config_file_noex(ConfigBaseDir),
-    Context#{config_base_dir => ConfigBaseDir,
-             main_config_file_noex => MainConfigFileNoEx,
-             advanced_config_file_noex => AdvancedConfigFileNoEx}.
+    Context#{config_base_dir => ConfigBaseDir}.
 
 get_config_base_dir(#{os_type := {unix, _}}) ->
     SysPrefix = get_sys_prefix(),
@@ -420,23 +435,38 @@ get_config_base_dir(#{os_type := {win32, _}}) ->
     Dir = get_rabbitmq_base(),
     normalize_path(Dir).
 
-get_main_config_file_noex(ConfigBaseDir) ->
+config_files(Context) ->
+    MainConfigFileNoEx = get_main_config_file_noex(Context),
+    AdvancedConfigFileNoEx = get_advanced_config_file_noex(Context),
+    Context#{main_config_file_noex => MainConfigFileNoEx,
+             advanced_config_file_noex => AdvancedConfigFileNoEx}.
+
+get_main_config_file_noex(Context) ->
     File = get_prefixed_env_var(
              "RABBITMQ_CONFIG_FILE",
-             filename:join(ConfigBaseDir, "rabbitmq")),
+             get_default_main_config_file_noex(Context)),
     File1 = re:replace(File, "\\.(conf|config)$", "", [{return, list}]),
     Normalized = normalize_path(File1),
     %os:putenv("RABBITMQ_CONFIG_FILE", Normalized),
     Normalized.
 
-get_advanced_config_file_noex(ConfigBaseDir) ->
+get_default_main_config_file_noex(#{config_base_dir := ConfigBaseDir}) ->
+    filename:join(ConfigBaseDir, "rabbitmq").
+
+get_advanced_config_file_noex(Context) ->
     File = get_prefixed_env_var(
              "RABBITMQ_ADVANCED_CONFIG_FILE",
-             filename:join(ConfigBaseDir, "advanced")),
+             get_default_advanced_config_file_noex(Context)),
     File1 = re:replace(File, "\\.config$", "", [{return, list}]),
     Normalized = normalize_path(File1),
     %os:putenv("RABBITMQ_ADVANCED_CONFIG_FILE", Normalized),
     Normalized.
+
+get_default_advanced_config_file_noex(#{config_base_dir := ConfigBaseDir}) ->
+    filename:join(ConfigBaseDir, "advanced").
+
+get_default_advanced_config_file(Context) ->
+    get_default_advanced_config_file_noex(Context) ++ ".config".
 
 %% -------------------------------------------------------------------
 %%
@@ -808,12 +838,12 @@ get_plugins_path(#{from_remote_node := Remote}) ->
         Path ->
             Path
     end;
-get_plugins_path(_) ->
-    get_plugins_path_from_env().
+get_plugins_path(Context) ->
+    get_plugins_path_from_env(Context).
 
-get_plugins_path_from_env() ->
+get_plugins_path_from_env(Context) ->
     get_prefixed_env_var(
-      "RABBITMQ_PLUGINS_DIR", get_default_plugins_path_from_env()).
+      "RABBITMQ_PLUGINS_DIR", get_default_plugins_path_from_env(Context)).
 
 get_plugins_path_from_node(Remote) ->
     Ret = query_remote(Remote, application, get_env, [rabbit, plugins_dir]),
@@ -830,12 +860,20 @@ get_default_plugins_path(#{from_remote_node := offline}) ->
     undefined;
 get_default_plugins_path(#{from_remote_node := Remote}) ->
     get_default_plugins_path_from_node(Remote);
-get_default_plugins_path(_) ->
-    get_default_plugins_path_from_env().
+get_default_plugins_path(Context) ->
+    get_default_plugins_path_from_env(Context).
 
-get_default_plugins_path_from_env() ->
+get_default_plugins_path_from_env(#{os_type := OSType}) ->
     Path = code:lib_dir(rabbit_common),
-    filename:dirname(Path).
+    PluginsDir = filename:dirname(Path),
+    case {OSType, PluginsDir} of
+        {{unix, _}, "/usr/lib/rabbitmq/" ++ _} ->
+            UserPluginsDir = filename:join(
+                               ["/", "usr", "lib", "rabbitmq", "plugins"]),
+            UserPluginsDir ++ ":" ++ PluginsDir;
+        _ ->
+            PluginsDir
+    end.
 
 get_default_plugins_path_from_node(Remote) ->
     Ret = query_remote(Remote, code, lib_dir, [rabbit_common]),
@@ -869,10 +907,13 @@ get_enabled_plugins_file(Context) ->
     get_enabled_plugins_file_from_env(Context).
 
 get_enabled_plugins_file_from_env(Context) ->
-    ConfigBaseDir = get_config_base_dir(Context),
-    Default = filename:join(ConfigBaseDir, "enabled_plugins"),
-    File = get_prefixed_env_var("RABBITMQ_ENABLED_PLUGINS_FILE", Default),
+    File = get_prefixed_env_var(
+             "RABBITMQ_ENABLED_PLUGINS_FILE",
+             get_default_enabled_plugins_file(Context)),
     normalize_path(File).
+
+get_default_enabled_plugins_file(#{config_base_dir := ConfigBaseDir}) ->
+    filename:join(ConfigBaseDir, "enabled_plugins").
 
 get_enabled_plugins_file_from_node(Remote) ->
     Ret = query_remote(Remote,
@@ -997,6 +1038,129 @@ get_rabbitmq_home(Context) ->
     %os:putenv("RABBITMQ_HOME", Normalized),
     Normalized.
 
+load_conf_env_file(#{os_type := {unix, _}} = Context) ->
+    SysPrefix = get_sys_prefix(),
+    Default = filename:join(
+                [SysPrefix, "etc", "rabbitmq", "rabbitmq-env.conf"]),
+    ConfEnvFile = get_prefixed_env_var("RABBITMQ_CONF_ENV_FILE", Default),
+    case filelib:is_regular(ConfEnvFile) of
+        false ->
+            rabbit_log_prelaunch:debug(
+              "No $RABBITMQ_CONF_ENV_FILE (~ts)", [ConfEnvFile]),
+            Context;
+        true ->
+            case os:find_executable("sh") of
+                false -> Context;
+                Sh    -> do_load_conf_env_file(Context, Sh, ConfEnvFile)
+            end
+    end.
+
+do_load_conf_env_file(Context, Sh, ConfEnvFile) ->
+    rabbit_log_prelaunch:debug(
+      "Sourcing $RABBITMQ_CONF_ENV_FILE: ~ts", [ConfEnvFile]),
+    Marker = rabbit_misc:format(
+               "-----BEGIN VARS LIST FOR PID ~s-----", [os:getpid()]),
+    Script = rabbit_misc:format(
+               ". \"~ts\" && "
+               "echo \"~s\" && "
+               "set", [ConfEnvFile, Marker]),
+    Args = ["-ex", "-c", Script],
+
+    SysPrefix = get_sys_prefix(),
+    RabbitmqHome = get_rabbitmq_home(Context),
+    Env = [
+           {"SYS_PREFIX", SysPrefix},
+           {"RABBITMQ_HOME", RabbitmqHome},
+           {"CONFIG_FILE", get_default_main_config_file_noex(Context)},
+           {"ADVANCED_CONFIG_FILE", get_default_advanced_config_file(Context)},
+           {"MNESIA_BASE", get_default_mnesia_base_dir(Context)},
+           {"ENABLED_PLUGINS_FILE", get_default_enabled_plugins_file(Context)},
+           {"PLUGINS_DIR", get_default_plugins_path_from_env(Context)}
+          ],
+
+    Port = erlang:open_port(
+             {spawn_executable, Sh},
+             [{args, Args},
+              {env, Env},
+              binary,
+              use_stdio,
+              stderr_to_stdout,
+              exit_status]),
+    collect_sh_output(Context, Port, Marker, <<>>).
+
+collect_sh_output(Context, Port, Marker, Output) ->
+    receive
+        {Port, {exit_status, ExitStatus}} ->
+            rabbit_log_prelaunch:debug(
+              "$RABBITMQ_CONF_ENV_FILE exit status: ~b", [ExitStatus]),
+            DecodedOutput = unicode:characters_to_list(Output),
+            Lines = string:split(string:trim(DecodedOutput), "\n", all),
+            rabbit_log_prelaunch:debug("$RABBITMQ_CONF_ENV_FILE output:"),
+            [rabbit_log_prelaunch:debug("  ~ts", [Line])
+             || Line <- Lines],
+            parse_conf_env_file_output(Context, Marker, Lines);
+        {Port, {data, Chunk}} ->
+            collect_sh_output(Context, Port, Marker, [Output, Chunk])
+    end.
+
+parse_conf_env_file_output(Context, _, []) ->
+    Context;
+parse_conf_env_file_output(Context, Marker, ["+ " ++ _ | Lines]) ->
+    %% Result of `set +x`; ignored.
+    parse_conf_env_file_output(Context, Marker, Lines);
+parse_conf_env_file_output(Context, Marker, [Marker | Lines]) ->
+    parse_conf_env_file_output1(Context, Lines, #{}).
+
+parse_conf_env_file_output1(Context, [], Vars) ->
+    %% Re-export variables.
+    lists:foreach(
+      fun(Var) ->
+              case var_is_used(Var) andalso not var_is_set(Var) of
+                  true ->
+                      rabbit_log_prelaunch:debug(
+                        "$RABBITMQ_CONF_ENV_FILE: re-exporting variable $~s",
+                        [Var]),
+                      os:putenv(Var, maps:get(Var, Vars));
+                  false ->
+                      ok
+              end
+      end, maps:keys(Vars)),
+    Context;
+parse_conf_env_file_output1(Context, ["+ " ++ _ | Lines], Vars) ->
+    %% Result of `set +x`; ignored.
+    parse_conf_env_file_output1(Context, Lines, Vars);
+parse_conf_env_file_output1(Context, [Line | Lines], Vars) ->
+    case string:split(Line, "=") of
+        [Var, IncompleteValue] ->
+            {Value, Lines1} = parse_sh_literal(IncompleteValue, Lines),
+            Vars1 = Vars#{Var => Value},
+            parse_conf_env_file_output1(Context, Lines1, Vars1);
+        Other ->
+            %% Parsing failed somehow.
+            rabbit_log_prelaunch:warning(
+              "Failed to parse $RABBITMQ_CONF_ENV_FILE output: ~p", [Other]),
+            Context
+    end.
+
+parse_sh_literal("'" ++ SingleQuoted, Lines) ->
+    [$' | Reversed] = lists:reverse(SingleQuoted),
+    {lists:reverse(Reversed), Lines};
+parse_sh_literal("$'" ++ DollarSingleQuoted, Lines) ->
+    parse_dollar_single_quoted_literal(DollarSingleQuoted, Lines, "");
+parse_sh_literal(Unquoted, Lines) ->
+    {Unquoted, Lines}.
+
+parse_dollar_single_quoted_literal([$'], Lines, Literal) ->
+    %% We reached the closing single quote.
+    {lists:reverse(Literal), Lines};
+parse_dollar_single_quoted_literal([], [Line | Lines], Literal) ->
+    %% We reached the end of line before finding the closing single
+    %% quote. The literal containues on the next line and includes that
+    %% newline character.
+    parse_dollar_single_quoted_literal(Line, Lines, [$\n | Literal]);
+parse_dollar_single_quoted_literal([C | Rest], Lines, Literal) ->
+    parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]).
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
@@ -1026,9 +1190,20 @@ get_prefixed_env_var(VarName, DefaultValue) ->
         Value -> Value
     end.
 
+var_is_used(Var) ->
+    lists:member(Var, ?USED_ENV_VARS) orelse
+    lists:member("RABBITMQ_" ++ Var, ?USED_ENV_VARS).
+
+var_is_set("RABBITMQ_" ++ Var = PrefixedVar) ->
+    os:getenv(PrefixedVar) /= false orelse
+    os:getenv(Var) /= false;
+var_is_set(Var) ->
+    os:getenv("RABBITMQ_" ++ Var) /= false orelse
+    os:getenv(Var) /= false.
+
 value_is_yes(Value) when is_list(Value) ->
     Options = [{capture, none}, caseless],
-    re:run(string:strip(Value), "^(1|yes|true)$", Options) =:= match.
+    re:run(string:trim(Value), "^(1|yes|true)$", Options) =:= match.
 
 normalize_path("" = Path) ->
     Path;
