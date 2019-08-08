@@ -7,6 +7,7 @@
          get_context_before_logging_init/0,
          get_context_before_logging_init/1,
          get_context_after_logging_init/1,
+         get_context_after_reloading_env/1,
          is_dev_environment/0,
          dbg_config/0,
          log_process_env/0,
@@ -44,12 +45,14 @@
         ]).
 
 get_context() ->
-    EarlyContext = get_context_before_logging_init(),
-    get_context_after_logging_init(EarlyContext).
+    Context0 = get_context_before_logging_init(),
+    Context1 = get_context_after_logging_init(Context0),
+    get_context_after_reloading_env(Context1).
 
 get_context(TakeFromRemoteNode) ->
-    EarlyContext = get_context_before_logging_init(TakeFromRemoteNode),
-    get_context_after_logging_init(EarlyContext).
+    Context0 = get_context_before_logging_init(TakeFromRemoteNode),
+    Context1 = get_context_after_logging_init(Context0),
+    get_context_after_reloading_env(Context1).
 
 get_context_before_logging_init() ->
     get_context_before_logging_init(false).
@@ -63,13 +66,22 @@ get_context_before_logging_init(TakeFromRemoteNode) ->
 
     run_context_steps(context_base(TakeFromRemoteNode), Steps).
 
-get_context_after_logging_init(EarlyContext) ->
+get_context_after_logging_init(Context) ->
     %% The order of steps below is important because some of them
     %% depends on previous steps.
     Steps = [
              fun data_dir/1,
              fun config_base_dir/1,
              fun load_conf_env_file/1,
+             fun log_levels/1
+            ],
+
+    run_context_steps(Context, Steps).
+
+get_context_after_reloading_env(Context) ->
+    %% The order of steps below is important because some of them
+    %% depends on previous steps.
+    Steps = [
              fun node_name_and_type/1,
              fun maybe_setup_dist_for_remote_query/1,
              fun dbg_config/1,
@@ -84,7 +96,7 @@ get_context_after_logging_init(EarlyContext) ->
              fun tcp_configuration/1
             ],
 
-    run_context_steps(EarlyContext, Steps).
+    run_context_steps(Context, Steps).
 
 context_base(TakeFromRemoteNode) ->
     OSType = os:type(),
@@ -1088,18 +1100,21 @@ collect_sh_output(Context, Port, Marker, Output) ->
             rabbit_log_prelaunch:debug("$RABBITMQ_CONF_ENV_FILE output:"),
             [rabbit_log_prelaunch:debug("  ~ts", [Line])
              || Line <- Lines],
-            parse_conf_env_file_output(Context, Marker, Lines);
+            case ExitStatus of
+                0 -> parse_conf_env_file_output(Context, Marker, Lines);
+                _ -> Context
+            end;
         {Port, {data, Chunk}} ->
             collect_sh_output(Context, Port, Marker, [Output, Chunk])
     end.
 
 parse_conf_env_file_output(Context, _, []) ->
     Context;
-parse_conf_env_file_output(Context, Marker, ["+ " ++ _ | Lines]) ->
-    %% Result of `set +x`; ignored.
-    parse_conf_env_file_output(Context, Marker, Lines);
 parse_conf_env_file_output(Context, Marker, [Marker | Lines]) ->
-    parse_conf_env_file_output1(Context, Lines, #{}).
+    %% Found our marker, let's parse variables.
+    parse_conf_env_file_output1(Context, Lines, #{});
+parse_conf_env_file_output(Context, Marker, [_ | Lines]) ->
+    parse_conf_env_file_output(Context, Marker, Lines).
 
 parse_conf_env_file_output1(Context, [], Vars) ->
     %% Re-export variables.
@@ -1116,21 +1131,38 @@ parse_conf_env_file_output1(Context, [], Vars) ->
               end
       end, maps:keys(Vars)),
     Context;
-parse_conf_env_file_output1(Context, ["+ " ++ _ | Lines], Vars) ->
-    %% Result of `set +x`; ignored.
-    parse_conf_env_file_output1(Context, Lines, Vars);
 parse_conf_env_file_output1(Context, [Line | Lines], Vars) ->
-    case string:split(Line, "=") of
-        [Var, IncompleteValue] ->
-            {Value, Lines1} = parse_sh_literal(IncompleteValue, Lines),
-            Vars1 = Vars#{Var => Value},
-            parse_conf_env_file_output1(Context, Lines1, Vars1);
-        Other ->
-            %% Parsing failed somehow.
-            rabbit_log_prelaunch:warning(
-              "Failed to parse $RABBITMQ_CONF_ENV_FILE output: ~p", [Other]),
-            Context
+    SetXOutput = is_sh_set_x_output(Line),
+    ShFunction = is_sh_function(Line, Lines),
+    if
+        SetXOutput ->
+            parse_conf_env_file_output1(Context, Lines, Vars);
+        ShFunction ->
+            skip_sh_function(Context, Lines, Vars);
+        true ->
+            case string:split(Line, "=") of
+                [Var, IncompleteValue] ->
+                    {Value, Lines1} = parse_sh_literal(IncompleteValue, Lines),
+                    Vars1 = Vars#{Var => Value},
+                    parse_conf_env_file_output1(Context, Lines1, Vars1);
+                _ ->
+                    %% Parsing failed somehow.
+                    rabbit_log_prelaunch:warning(
+                      "Failed to parse $RABBITMQ_CONF_ENV_FILE output: ~p",
+                      [Line]),
+                    Context
+            end
     end.
+
+is_sh_set_x_output(Line) ->
+    re:run(Line, "^\\++ ", [{capture, none}]) =:= match.
+
+is_sh_function(_, []) ->
+    false;
+is_sh_function(Line, Lines) ->
+    re:run(Line, "\\s\\(\\)\\s*$", [{capture, none}]) =:= match
+    andalso
+    re:run(hd(Lines), "^\\s*\\{\\s*$", [{capture, none}]) =:= match.
 
 parse_sh_literal("'" ++ SingleQuoted, Lines) ->
     [$' | Reversed] = lists:reverse(SingleQuoted),
@@ -1150,6 +1182,11 @@ parse_dollar_single_quoted_literal([], [Line | Lines], Literal) ->
     parse_dollar_single_quoted_literal(Line, Lines, [$\n | Literal]);
 parse_dollar_single_quoted_literal([C | Rest], Lines, Literal) ->
     parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]).
+
+skip_sh_function(Context, ["}" | Lines], Vars) ->
+    parse_conf_env_file_output1(Context, Lines, Vars);
+skip_sh_function(Context, [_ | Lines], Vars) ->
+    skip_sh_function(Context, Lines, Vars).
 
 %% -------------------------------------------------------------------
 %% Helpers.
