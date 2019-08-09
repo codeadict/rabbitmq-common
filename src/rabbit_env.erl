@@ -1165,19 +1165,29 @@ is_sh_function(Line, Lines) ->
     re:run(hd(Lines), "^\\s*\\{\\s*$", [{capture, none}]) =:= match.
 
 parse_sh_literal("'" ++ SingleQuoted, Lines) ->
-    [$' | Reversed] = lists:reverse(SingleQuoted),
-    {lists:reverse(Reversed), Lines};
+    parse_single_quoted_literal(SingleQuoted, Lines, "");
 parse_sh_literal("$'" ++ DollarSingleQuoted, Lines) ->
     parse_dollar_single_quoted_literal(DollarSingleQuoted, Lines, "");
 parse_sh_literal(Unquoted, Lines) ->
     {Unquoted, Lines}.
+
+parse_single_quoted_literal([$'], Lines, Literal) ->
+    %% We reached the closing single quote.
+    {lists:reverse(Literal), Lines};
+parse_single_quoted_literal([], [Line | Lines], Literal) ->
+    %% We reached the end of line before finding the closing single
+    %% quote. The literal continues on the next line and includes that
+    %% newline character.
+    parse_single_quoted_literal(Line, Lines, [$\n | Literal]);
+parse_single_quoted_literal([C | Rest], Lines, Literal) ->
+    parse_single_quoted_literal(Rest, Lines, [C | Literal]).
 
 parse_dollar_single_quoted_literal([$'], Lines, Literal) ->
     %% We reached the closing single quote.
     {lists:reverse(Literal), Lines};
 parse_dollar_single_quoted_literal([], [Line | Lines], Literal) ->
     %% We reached the end of line before finding the closing single
-    %% quote. The literal containues on the next line and includes that
+    %% quote. The literal continues on the next line and includes that
     %% newline character.
     parse_dollar_single_quoted_literal(Line, Lines, [$\n | Literal]);
 parse_dollar_single_quoted_literal([C | Rest], Lines, Literal) ->
