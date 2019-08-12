@@ -20,7 +20,7 @@
         [
          "RABBITMQ_ADVANCED_CONFIG_FILE",
          "RABBITMQ_BASE",
-         "RABBITMQ_CONF_ENV_FILE"
+         "RABBITMQ_CONF_ENV_FILE",
          "RABBITMQ_CONFIG_FILE",
          "RABBITMQ_DBG",
          "RABBITMQ_DIST_PORT",
@@ -1120,7 +1120,9 @@ parse_conf_env_file_output1(Context, [], Vars) ->
     %% Re-export variables.
     lists:foreach(
       fun(Var) ->
-              case var_is_used(Var) andalso not var_is_set(Var) of
+              IsUsed = var_is_used(Var),
+              IsSet = var_is_set(Var),
+              case IsUsed andalso not IsSet of
                   true ->
                       rabbit_log_prelaunch:debug(
                         "$RABBITMQ_CONF_ENV_FILE: re-exporting variable $~s",
@@ -1129,7 +1131,7 @@ parse_conf_env_file_output1(Context, [], Vars) ->
                   false ->
                       ok
               end
-      end, maps:keys(Vars)),
+      end, lists:sort(maps:keys(Vars))),
     Context;
 parse_conf_env_file_output1(Context, [Line | Lines], Vars) ->
     SetXOutput = is_sh_set_x_output(Line),
@@ -1227,8 +1229,9 @@ get_prefixed_env_var(VarName, DefaultValue) ->
         Value -> Value
     end.
 
+var_is_used("RABBITMQ_" ++ _ = PrefixedVar) ->
+    lists:member(PrefixedVar, ?USED_ENV_VARS);
 var_is_used(Var) ->
-    lists:member(Var, ?USED_ENV_VARS) orelse
     lists:member("RABBITMQ_" ++ Var, ?USED_ENV_VARS).
 
 var_is_set("RABBITMQ_" ++ Var = PrefixedVar) ->
