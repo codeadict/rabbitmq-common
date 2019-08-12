@@ -1077,7 +1077,8 @@ do_load_conf_env_file(Context, Sh, ConfEnvFile) ->
            {"ADVANCED_CONFIG_FILE", get_default_advanced_config_file(Context)},
            {"MNESIA_BASE", get_default_mnesia_base_dir(Context)},
            {"ENABLED_PLUGINS_FILE", get_default_enabled_plugins_file(Context)},
-           {"PLUGINS_DIR", get_default_plugins_path_from_env(Context)}
+           {"PLUGINS_DIR", get_default_plugins_path_from_env(Context)},
+           {"CONF_ENV_FILE_PHASE", "rabbtimq-prelaunch"}
           ],
 
     Port = erlang:open_port(
