@@ -54,7 +54,9 @@
           %% vhost name as a binary
           virtual_host,
           %% proplist of limits configured, if any
-          limits}).
+          limits,
+          description,
+          tags}).
 
 %% Client connection, used by rabbit_reader
 %% and related modules.
