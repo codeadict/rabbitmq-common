@@ -55,8 +55,8 @@
           virtual_host,
           %% proplist of limits configured, if any
           limits,
-          description,
-          tags}).
+          description = "",
+          tags = ""}).
 
 %% Client connection, used by rabbit_reader
 %% and related modules.
